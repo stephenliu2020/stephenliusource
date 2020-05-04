@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style type="text/css">
+                    /* Obviously, none of this is necessary...
+                       this is just to show that it can be done ...
+                       I'm just putting some basic style on my shell
+                       class, and the li's and a's within */
+        .shell {
+            width:300px;    
+        }
+
+        .shell ul li {
+            list-style:none;    
+        }
+
+        .shell a {
+            color: #232323;
+            display: block;
+            width: 100%;
+            height:30px;
+            margin: .5em 0;
+            background: #CFC;
+            padding: 5px 10px;
+            font-weight:bold;
+            border: 1px solid #999;
+            border-radius: 3px;
+            text-decoration:none;
+        }
+    </style>
+    <!-- Get us some jQuery goodness! -->
+	<meta http-equiv="access-control-allow-origin" content="https://openapi.lechange.cn">
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+
+<script>
+
+    var IP, Port, theUrl= "ws://10.10.10.104:8060/camera";
+	var strPtc = "ws";
+	var ws;
+	var bWsOpened = false;
+	var requestFromFileList = false;
+    var href;
+	var startPlayAVC = false;
+	function onLoadFunction()
+	{
+		ws=new WebSocket("ws://10.10.10.104:8060/camera");
+		ws.onmessage=function(event)
+		{
+			if (requestFromFileList)
+			{
+				var $s    = $(".shell ul");
+				var a = event.data.split(',');
+				a.forEach(function(value) {
+					console.log(value);
+					
+					href = 'filelist/'+ value;
+					var test = "<li><button onclick=\"ws_send(value)\" value=\"" + value + "\">" + value + "</button></li>"
+					$s.append(test);
+				});
+
+				requestFromFileList=false;
+			}
+			else if (startPlayAVC)
+			{
+					var video = document.getElementById('video');
+					var mp4 = document.getElementById('mp4');
+					d = new Date();
+
+					mp4.src = event.data;
+
+					video.load();
+					video.play();
+					startPlayAVC = false;
+			}
+			else
+			{
+				console.log(event.data);
+				document.getElementById("statusResponse").innerHTML =event.data;
+			}
+
+		}
+		ws.onopen = function (event) {
+			document.getElementById("urlAddr").innerHTML=theUrl+" WebSocket is opened";;
+			bWsOpened = true;
+		};
+	}
+	
+	function onSet()
+	{
+		IP = document.getElementById("Ip").value;
+		Port = document.getElementById("Port").value;
+		if (IP.length == 0)
+			IP = "10.10.10.104";
+		if (Port.length==0)
+			Port = "8060";
+		var ptc = document.getElementById("protocols");
+		strPtc = ptc.options[ptc.selectedIndex].text;
+		theUrl = strPtc + "://" + IP + ":" + Port ; 
+		document.getElementById("urlAddr").innerHTML=theUrl;
+		if (strPtc=="ws"&&!bWsOpened)
+		{
+		    //theUrl = theUrl + "/filelist";
+			ws=new WebSocket(theUrl);
+			ws.onmessage=function(event)
+			{
+			  if (requestFromFileList)
+			  {
+				var $s    = $(".shell ul");
+				var a = event.data.split(',');
+				a.forEach(function(value) {
+					console.log(value);
+					
+					var href = 'filelist/'+ value;
+					var test = "<button onclick=\"ws_send(href)\" >" + value + "</button>" ;
+					$s.append(test);
+				});
+
+				requestFromFileList=false;
+			  }
+			  else
+			  {
+				console.log(event.data);
+				document.getElementById("statusResponse").innerHTML =event.data;
+			  }
+			}
+			ws.onopen = function (event) {
+				document.getElementById("statusResponse").innerHTML ="WebSocket is open";
+				bWsOpened = true;
+			};
+		}
+		
+	}
+	
+	function ws_send(value)
+	{
+		ws.send(value);
+		startPlayAVC = true;
+	}
+	
+    function onStatusWs() {
+		ws.send("camera_status"); 
+    }
+
+	function onCommandWs(commandIndex)
+	{
+		var postData;
+		if (commandIndex==1)
+			postData = "preview";
+		else if (commandIndex==2)
+			postData = "snapshot";
+		else if (commandIndex==4)
+			postData = "stopCapCmd";
+		else
+			postData = "kill";	
+		ws.send("camera_command:"+ postData); 
+	}
+
+	function onStatusHttp() {
+        var xhr = new XMLHttpRequest();
+		var url = theUrl + '/camera_status';
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+				document.getElementById("statusResponse").innerHTML = xhr.response;
+                //alert(xhr.response);
+            }
+        }
+		var postData = "";
+        xhr.open('get', url, true);
+		xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        //xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+        xhr.send();
+    }
+
+	function onCommandHttp(commandIndex)
+	{
+	  //var url = "http://10.10.10.83:80";
+	  var method = "POST";
+	  var postData;
+	  if (commandIndex==1)
+	     postData = "{\"previewCmd\":\"preview\"}";
+	  else if (commandIndex==2)
+	     postData = "{\"snapshotCmd\":\"snapshot\"}";
+	  else if (commandIndex==4)
+	     postData = "{\"stopCapCmd\":\"stopcapture\"}";
+	  else
+		 postData = "{\"killCmd\":\"kill\"}";	
+	  var shouldBeAsync = true;
+
+	  var request = new XMLHttpRequest();
+
+	  request.onload = function () {
+
+        // You can get all kinds of information about the HTTP response.
+	    var status = request.status; // HTTP response status, e.g., 200 for "200 OK"
+	    var data = request.responseText; // Returned data, e.g., an HTML document.
+		document.getElementById("commandResponse").innerHTML = request.response;
+
+	    //alert(data);  
+	  }
+	  var url = theUrl + '/camera_command';
+	  request.open(method, url, shouldBeAsync);
+
+	  request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+      request.send(postData);
+	}
+	
+	function onStatus() {
+	  if (strPtc=="ws")
+		onStatusWs();
+	  else
+	  	onStatusHttp();
+	}
+	
+	function onCommand(commandIndex) {
+	  if (strPtc=="ws")
+		onCommandWs(commandIndex);
+	  else
+	  	onCommandHttp(commandIndex);
+	}
+	
+	function getListWs()
+	{
+		requestFromFileList = true;
+		ws.send("filelist"); 
+	}
+	
+	$(function(){ // .get
+            // Setup our method to retrieve the file list
+
+		var getFiles = function(){
+        // Call the /dl/ directory, which should serve 
+        // back the directory-listing default page
+        // NOTE: This WILL NOT work if you have your server's 
+        // default index/home page in this folder, as that will
+        // be returned instead of a directory listing!
+			if (strPtc=="ws")
+			{
+			  getListWs();
+			  return;
+			}
+			var url = theUrl + "/filelist";
+			$.get(url, function(data) 
+			{
+				//document.getElementById("displayFileList").innerHTML = "";
+				// get a reference to the ul I want to populate
+				var $s    = $(".shell ul");
+				// get a list of a tags from the returned data
+				data.forEach(myFunction);
+                var href ;
+				function myFunction(value)
+				{
+					                // extract the href attr
+					href = url+'/'+ value;
+                // filter out any links you don't want to display... 
+                                    // in this case, I didn't want to display the 
+                                    // sort-links and any links starting with a /
+					//if(href.charAt(0) != "?" && href.charAt(0) != "/")
+					{
+                    // append a new li with an anchor tag inside 
+                                            // it that has the href, and the link's text
+						var test = "<li><a onclick=\"VideoPlayFunction(href)\" href=\"" + href + "\">" +
+                                                        value + "</a></li>"
+						$s.append(test);
+                    }
+
+				}
+
+			});
+			
+		}
+            // assign my click handler to #btnGet
+		$("#btnGet").click(getFiles);
+     });
+	 
+	 function VideoPlayFunction(href)
+	 {
+	   //imageElement = document.getElementById( 'videoPlayer' );
+	   //imageElement.src = href ;
+	   //imageElement.autoplay = 1;
+	   
+	   		var video = document.getElementById('video');
+			var mp4 = document.getElementById('mp4');
+			d = new Date();
+
+			mp4.src = href;
+
+			video.load();
+			video.play();
+	 }
+
+
+</script>
+</head>
+<body onload="onLoadFunction()">
+<b> Server url:</b>
+	<p id="urlAddr">ws://10.10.10.122:8060</p>
+    <form>
+	    Protocol:<br>
+		<select name="protocols" id="protocols">
+		  <option value = "ws"> ws </option>
+		  <option value = "http"> http </option>
+		</select>
+		<br>
+		IP:<br>
+		<input id="Ip" type="text" name="ip"><br>
+		Port:<br>
+		<input id="Port" type="text" name="port"><br>
+		<input type="button" name="submit" value="Submit" onclick="onSet()"/>
+	</form>
+    <h1>Camera (DirectShow + HTTP) Test</h1>
+	
+	<button onclick="onStatus()">Get Status</button>
+	<p id="statusResponse"></p>
+
+	<button onclick="onCommand(1)">Start Camera</button>
+	<br>
+	<button onclick="onCommand(3)">Exit Camera</button>
+	<br>
+	<p id="commandResponse"></p>
+
+	<button onclick="onCommand(2)">Start capture</button>
+	<button onclick="onCommand(4)">Stop capture</button>
+
+	<p id="commandResponse"></p>
+
+    <h1>Get Video File Lists</h1>
+
+    <button id="btnGet">.get</button>
+
+    <div class="shell" id ="displayFileList">
+        <!-- This is the place we're going to build our list -->
+        <ul></ul>
+    </div>
+	
+    <br>
+	<div id="divVideo">
+    <video id="video" controls width="560">
+        <source id="mp4" type="video/mp4" />
+    </video>
+	</div>
+	</br>
+
+	<div data-role="content">
+	<div id="videocontainer">
+		<video id="videoPlayer" width="320" height="240" controls type="video/mp4">
+	</div>
+	<!---div id="cameracontainer">
+		<img id="camera" src = 'http://10.10.10.91:80/filelist/Video9492141.mp4' width="640" height="480">
+	</div--->
+	</div>
+
+	<br>
+
+	
+</body>
+</html>
+
